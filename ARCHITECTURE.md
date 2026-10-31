@@ -373,6 +373,45 @@ schedule:
 
 ---
 
+## 10b. The road not taken: a Qwen3-MoE variant
+
+Qwen3's larger models replace each SwiGLU with a routed mixture of SwiGLU experts (Qwen3-30B-A3B:
+128 experts, 8 active). We tested that swap on the `levine` body to see whether it beats the dense
+model at this scale. Full reasoning, citations and numbers are in `DECISIONS.md` §8.
+
+**Why dense was expected to win:**
+- The spec caps *total* parameters, and every expert counts toward the cap, while MoE's documented
+  gains are at matched *compute* with many more total parameters.
+- We have ~0.09 tokens per parameter. Extra experts add memorisation capacity, and the literature
+  says MoEs overfit repeated, small data more than dense models do.
+
+**What was built:** `MoEFeedForward`, the reference Qwen3-MoE layer, plus a Switch load-balancing
+loss and optional expert dropout for training. The router stays on AdamW. To compile on MPS, all
+experts run as one wide SwiGLU masked by the routing weights; outputs and gradients match the
+reference loop exactly (`tests/test_moe.py`).
+
+**What happened:**
+
+| Model | Total / active | 1 epoch (bpb) | 6 epochs (val loss) | Train/val gap at 6 epochs | Speed |
+|---|---|---|---|---|---|
+| dense `levine` | 114M / 114M | **0.6669** | **1.8224** | 0.210 | 10.2k tok/s |
+| 8 experts, top-2, at the cap | 194M / 75M | 0.6673 (tie) | 1.8227 (tie) | 0.261 | 6.7k tok/s |
+| same + expert dropout 0.4 | 194M / 75M | — | 1.8527 | 0.152 | 7.1k tok/s |
+| 8 experts, top-2, matched total | 115M / 55M | 0.6733 | — | — | 9.8k tok/s |
+| 32 experts, top-8 (Qwen3-style) | 195M / 75M | 0.6731 | — | — | 6.0k tok/s |
+
+- At the parameter cap the MoE **ties** the dense model, with 70% more weights and 1.5× the
+  wall-clock. With the same total size, or with fine-grained experts, it trails slightly.
+- At 6 epochs it fits the training set better (gap 0.261 vs 0.210) but not the validation set:
+  the extra capacity went to memorisation, as predicted.
+- Expert dropout narrowed the gap but cost validation loss; at 6 epochs nothing is overfitting yet.
+- 32-expert routing stayed noticeably unbalanced (busiest expert at ~2.6× its fair share).
+
+**Decision:** the dense SwiGLU stays. MoE becomes the better choice only with far more data than
+the spec allows.
+
+---
+
 ## 11. Known limitations
 
 - **Encoding errors in the data.** 5.6% of training stories contain mis-decoded curly quotes from

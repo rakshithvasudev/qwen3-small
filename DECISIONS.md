@@ -410,12 +410,44 @@ a modified Qwen3. The dense model was the default for three reasons.
 - At 6 epochs, `moe_cap` overfits earlier than dense, and expert dropout 0.4 narrows the gap.
 - The fine-grained variant is not better.
 
-**Results:** *pending* (stage 7, `runs/moe/summary.csv`).
+**Results** (stage 7, `runs/moe/summary.csv`; Muon 4e-3, WSD, 10% warmup, same seed and data as the dense references):
 
-| Run | Protocol | Dense reference | MoE result |
-|---|---|---|---|
-| `moe_cap_1ep` | 50k × 1 epoch, wd 0.1 (shapes stage) | levine 0.6669 bpb | *pending* |
-| `moe_matched_1ep` | same | levine 0.6669 bpb | *pending* |
-| `moe_cap_fine_1ep` | same | levine 0.6669 bpb | *pending* |
-| `moe_cap_6ep` | 20k × 6 epochs, wd 1.0 (wd stage) | levine 1.822 val loss | *pending* |
-| `moe_cap_6ep_edrop0.4` | same, expert dropout 0.4 | levine 1.822 val loss | *pending* |
+| Run | Protocol | Dense `levine` | MoE | Δ | Train/val gap (MoE vs dense) | Wall-clock (MoE vs dense) |
+|---|---|---|---|---|---|---|
+| `moe_cap_1ep` | 50k × 1 epoch, wd 0.1 | 0.6669 bpb | 0.6673 bpb | +0.0004 | +0.007 vs +0.003 | 24.3 vs 15.9 min |
+| `moe_matched_1ep` | same | 0.6669 bpb | 0.6733 bpb | +0.0064 | +0.007 | 16.7 min |
+| `moe_cap_fine_1ep` | same | 0.6669 bpb | 0.6731 bpb | +0.0062 | +0.008 | 27.3 min |
+| `moe_cap_6ep` | 20k × 6 epochs, wd 1.0 | 1.8224 val loss | 1.8227 | +0.0003 | **+0.261 vs +0.210** | 57.1 vs 38.1 min |
+| `moe_cap_6ep_edrop0.4` | same, expert dropout 0.4 | 1.8224 val loss | 1.8527 | +0.0303 | +0.152 | 55.5 min |
+
+Seed noise for dense `levine` at 1 epoch is 0.0037 bpb (seed 0 vs 1), so the `moe_cap` deltas are
+ties and the `moe_matched` / `moe_cap_fine` deltas (~0.006) are small but outside it.
+
+**Load balance** (aux 1.0 = perfectly balanced; max load = busiest expert's share × E):
+- Top-2 of 8: aux ≈ 1.1–1.25, max load fell from ~2.0–2.3 to 1.5–1.8 during training. The balancing
+  loss worked; no expert collapsed.
+- Top-8 of 32: aux rose from 1.14 to 1.72 and max load stayed ~2.6. Fine-grained routing was
+  clearly less balanced at coefficient 0.01; Qwen3's fix is global-batch balancing (Qiu et al.,
+  "Demons in the Detail", ACL 2025), which needs larger batches than ours.
+
+**Learning curves:** at 6 epochs, `moe_cap` led dense by ~0.015–0.025 val loss through the
+constant-LR phase (steps 400–1200), then the WSD cooldown closed the gap to zero. At 1 epoch it
+trailed slightly early and tied at the end.
+
+**Prediction vs outcome:**
+- "1 epoch: MoE matches or trails" — **held.** At the cap it ties; with matched total params
+  (fewer active) or fine-grained experts it trails by ~0.006 bpb.
+- "Fine-grained is not better" — **held** (worse, and less balanced).
+- "6 epochs: `moe_cap` overfits earlier" — **partly.** It memorises more (train loss 1.561 vs
+  1.613, gap 0.261 vs 0.210), consistent with Jelassi et al. and Jha et al., but validation loss
+  never turned up within 6 epochs for either model, so it did not *overfit earlier* in the
+  early-stopping sense. Its extra capacity went to the training set, not to validation.
+- "Expert dropout 0.4 narrows the gap" — **the gap narrowed (0.152) but validation got worse
+  (+0.03).** At 6 epochs the model is not yet overfitting, so 0.4 dropout costs more fitting than
+  it saves. Jha et al.'s rescue applies at higher repetition counts than we tested.
+
+**Decision: keep the dense SwiGLU.** At the 200M total-parameter cap the best MoE only ties the
+114M dense model, while using 70% more parameters, running 1.5× slower on MPS, and widening the
+train/val gap. That matches the matched-memory result of Ludziejewski et al. (ICML 2025). Not
+tested: a 10-epoch MoE final run (the repetition regime where Jha et al. predict MoE falls behind),
+and MoE at higher token budgets, where it is expected to win.
