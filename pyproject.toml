@@ -1,0 +1,19 @@
+[project]
+name = "qwen3-small"
+version = "0.1.0"
+description = "Pretraining a ~100-200M Qwen3-style model on TinyStories and fine-tuning it as a sentiment classifier"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.9",
+    "tokenizers",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "matplotlib",
+    "jupyter",
+    "nbconvert",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
