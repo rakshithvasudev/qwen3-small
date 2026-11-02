@@ -412,6 +412,27 @@ the spec allows.
 
 ---
 
+## 10c. Lifting the data limit: the same model on 100k stories
+
+Every result above points at data as the binding constraint, so the final recipe was rerun
+unchanged on twice the unique stories (above the spec's 50k, so the 50k model stays the
+deliverable). The 50k split is kept intact and a second 50k pool is split 90/10 and appended, so
+both models are scored on the same validation text. Details: `DECISIONS.md` §9.
+
+| | 50k stories | 100k stories |
+|---|---|---|
+| Val loss / bpb (same val set) | 1.5738 / 0.5495 | **1.4899 / 0.5202** |
+| Train/val gap at end | +0.104 | −0.006 |
+| Sentiment classifier (full FT) | 97.37% | 97.50% |
+
+- Doubling the data cut validation loss by 5% and closed the train/val gap: the 50k model's
+  remaining error was partly memorisation.
+- The classifier did not change beyond noise; fine-tuning on the labelled set dominates.
+- Data and compute both doubled here (10 epochs each), so the gain is not attributable to data
+  alone.
+
+---
+
 ## 11. Known limitations
 
 - **Encoding errors in the data.** 5.6% of training stories contain mis-decoded curly quotes from

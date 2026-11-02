@@ -68,6 +68,13 @@ def grid(stage, a):
                 "--wd", str(a.wd), "--save", "--patience", str(a.patience), "--pause-every", "45"]
         return [("adamw", base + ["--optim", "adamw", "--lr", str(a.lr), "--sched", "cosine"]),
                 ("muon", base + ["--optim", "muon", "--lr", str(a.muon_lr or a.lr), "--sched", "wsd"])]
+    if stage == "final100k":
+        # The final Muon recipe on twice the unique data (above the spec's 50k range): tests how
+        # much of the remaining loss is due to the data limit rather than the model.
+        return [("muon", ["--config", a.config, "--vocab", str(a.vocab), "--stories", "100000",
+                          "--epochs", str(a.epochs), "--wd", str(a.wd), "--save", "--patience", str(a.patience),
+                          "--pause-every", "45", "--optim", "muon", "--lr", str(a.muon_lr or a.lr),
+                          "--sched", "wsd", "--warmup-frac", "0.05"])]
     raise ValueError(stage)
 
 

@@ -1,6 +1,6 @@
 """TinyStories data: normalization, train/val split, tokenization, packing.
 
-Split design: the first POOL_SIZE stories are shuffled once (seed 0) and cut
+Split design: the first POOL_SIZE unique stories are shuffled once (seed 0) and cut
 90/10 into a train pool and a val pool. A run with N stories takes the first
 0.9N from the train pool and the first 0.1N from the val pool, so every run
 size is a 90/10 split, smaller runs are subsets of larger ones, and no val
@@ -19,8 +19,9 @@ from .tokenizer import load_tokenizer, train_tokenizer
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-STORIES_FILE = DATA_DIR / "ts100k.jsonl"  # first 100k stories of roneneldan/TinyStories train
-POOL_SIZE = 50_000
+STORIES_FILE = DATA_DIR / "ts105k.jsonl"  # first 105k stories of roneneldan/TinyStories train
+POOL_SIZE = 50_000  # the spec's 10k-50k range; every sweep and the final runs draw from this pool
+EXT_POOL_SIZE = 50_000  # next 50k unique stories, only for runs above the spec range
 TRAIN_FRAC = 0.9
 SPLIT_SEED = 0
 
@@ -32,8 +33,21 @@ def normalize(text):
     return _APOSTROPHES.sub("", text.lower()).strip()
 
 
+def _split_pool(stories, n_stories):
+    order = list(range(len(stories)))
+    random.Random(SPLIT_SEED).shuffle(order)
+    n_train_pool = int(len(stories) * TRAIN_FRAC)
+    train_pool, val_pool = order[:n_train_pool], order[n_train_pool:]
+    n_train = round(n_stories * TRAIN_FRAC)
+    n_val = n_stories - n_train
+    return [stories[i] for i in train_pool[:n_train]], [stories[i] for i in val_pool[:n_val]]
+
+
 def load_split(n_stories=POOL_SIZE):
-    assert n_stories <= POOL_SIZE
+    """Runs above POOL_SIZE keep the whole 50k split and add a second, independently split
+    pool of the next unique stories, so the 50k val set stays a subset of every larger val set."""
+    assert n_stories <= POOL_SIZE + EXT_POOL_SIZE
+    total = POOL_SIZE + (EXT_POOL_SIZE if n_stories > POOL_SIZE else 0)
     # TinyStories contains empty and duplicated stories; drop them before splitting so
     # no text can appear in both train and val.
     stories, seen = [], set()
@@ -43,15 +57,14 @@ def load_split(n_stories=POOL_SIZE):
             if s and s not in seen:
                 seen.add(s)
                 stories.append(s)
-            if len(stories) == POOL_SIZE:
+            if len(stories) == total:
                 break
-    order = list(range(POOL_SIZE))
-    random.Random(SPLIT_SEED).shuffle(order)
-    n_train_pool = int(POOL_SIZE * TRAIN_FRAC)
-    train_pool, val_pool = order[:n_train_pool], order[n_train_pool:]
-    n_train = round(n_stories * TRAIN_FRAC)
-    n_val = n_stories - n_train
-    return [stories[i] for i in train_pool[:n_train]], [stories[i] for i in val_pool[:n_val]]
+    assert len(stories) == total, f"{STORIES_FILE} has only {len(stories)} unique stories"
+    train, val = _split_pool(stories[:POOL_SIZE], min(n_stories, POOL_SIZE))
+    if n_stories > POOL_SIZE:
+        ext_train, ext_val = _split_pool(stories[POOL_SIZE:], n_stories - POOL_SIZE)
+        train, val = train + ext_train, val + ext_val
+    return train, val
 
 
 def tokenizer_path(vocab_size):

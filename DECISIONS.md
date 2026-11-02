@@ -451,3 +451,53 @@ trailed slightly early and tied at the end.
 train/val gap. That matches the matched-memory result of Ludziejewski et al. (ICML 2025). Not
 tested: a 10-epoch MoE final run (the repetition regime where Jha et al. predict MoE falls behind),
 and MoE at higher token budgets, where it is expected to win.
+
+## 9. Beyond the spec range: the final recipe on 100k stories
+
+The final model is data-limited (~0.09 unique tokens per parameter, 10 passes over 9.7M tokens),
+and the MoE stage showed extra capacity going to memorisation. This run tests the other side:
+the same model and recipe (`levine`, Muon 4e-3, WSD, wd 1.0, 10 epochs, 5% warmup) with twice the
+unique stories. It is above the spec's 10k–50k range, so the 50k model stays the deliverable.
+
+- **Data:** the 50k split is kept exactly; a second pool of the next 50k unique stories is split
+  90/10 the same way and appended (`load_split`). The tokenizer is unchanged (trained on the 45k
+  train pool), so the classifier pipeline works with either checkpoint.
+- **Comparability:** the periodic eval windows come from the 50k run's val set, and the best
+  checkpoint is also scored on that full set (`val50k_loss`), so the two runs compare directly.
+- **Expectation:** Muennighoff et al. (NeurIPS 2023): under a data limit, more unique tokens
+  lower loss more than more passes over the same tokens. Same 10 epochs here, so ~194M tokens
+  seen (2× compute) over 2× unique data; the gain measures data and compute together. A
+  matched-compute control (100k × 5 epochs) was not run.
+
+**Result** (`runs/final100k/muon`, 11,740 steps, 192M tokens, 305 min + cooling breaks, no early stop):
+
+| Model | Val loss on the 50k run's val set | bpb on the same set | Train/val gap at end | Best step |
+|---|---|---|---|---|
+| 50k stories × 10 epochs (deliverable) | 1.5738 | 0.5495 | +0.104 | last |
+| 100k stories × 10 epochs | **1.4899** | **0.5202** | **−0.006** | last |
+
+- **−0.084 nats/token (−5.3% bpb) on identical validation text**, the largest single gain after
+  the optimizer change. On its own, larger 10k-story val set it scores 1.5082 / 0.5261 bpb.
+- **The train/val gap closed.** With 50k stories the model fits the training set 0.10 nats better
+  than unseen text; with 100k the two are equal. The 50k model's remaining error was partly
+  memorisation, which more unique data removes, as the data-constrained scaling result predicts
+  (Muennighoff et al., NeurIPS 2023).
+- **Same shape of curve:** a long plateau at ~2.04–2.05 during the constant-LR phase, then the WSD
+  cooldown takes it from 2.04 to 1.50. Best checkpoint is again the last step, so more
+  epochs or data might still help.
+- **Caveat:** data and compute both doubled; the matched-compute control (100k × 5 epochs) was not run.
+
+**Downstream classifier** (same splits and settings as §7; test set n = 1,597, so one standard
+error is ~0.4 points of accuracy):
+
+| Classifier | 50k backbone (acc / macro-F1) | 100k backbone (acc / macro-F1) |
+|---|---|---|
+| sentiment, full fine-tune, last token | 0.9737 / 0.9735 | 0.9750 / 0.9747 |
+| sentiment, frozen probe, last token | 0.7220 / 0.7195 | 0.7120 / 0.7091 |
+| emotion (6-class), full fine-tune | 0.9280 / 0.9044 | 0.9230 / 0.8968 |
+
+All differences are within ~1–2 standard errors: **the 5% language-modelling gain did not move
+the classifier.** Fine-tuning on 12.8k labelled sentences dominates what the backbone brings
+(random init already reaches 94.7%, §7), and TinyStories prose is far from the CSV's style, so
+better story modelling does not transfer to better sentence classification here. The 50k model
+remains the deliverable; the 100k model is the better language model.

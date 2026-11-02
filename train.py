@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 from generate import SPEC_PROMPTS, SPEC_TEMPERATURES, format_generations
 from qwen3_small.config import make_config
-from qwen3_small.data import bits_per_byte, get_dataset, get_tokenizer, make_windows
+from qwen3_small.data import POOL_SIZE, bits_per_byte, get_dataset, get_tokenizer, make_windows
 from qwen3_small.model import Qwen3Model
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -270,6 +270,12 @@ def main(argv=None):
         summary.update(full_val_loss=full_val, full_val_bpb=bits_per_byte(full_val, meta))
         print(f"best checkpoint (step {best_step}) on full val set: loss {full_val:.4f}, "
               f"bpb {bits_per_byte(full_val, meta):.4f}")
+        if args.stories > POOL_SIZE:
+            # Also score on the 50k run's val set (a subset of ours) so the two runs compare directly.
+            _, val50, meta50 = get_dataset(POOL_SIZE, args.vocab)
+            v = evaluate(model, make_windows(val50, seq_len), args.micro_bs)
+            summary.update(val50k_loss=v, val50k_bpb=bits_per_byte(v, meta50))
+            print(f"best checkpoint on the 50k-run val set: loss {v:.4f}, bpb {bits_per_byte(v, meta50):.4f}")
     samples = format_generations(model, tok, SPEC_PROMPTS[:1], SPEC_TEMPERATURES, seed=args.seed)
     (out_dir / "samples.txt").write_text(samples)
     print(samples)
