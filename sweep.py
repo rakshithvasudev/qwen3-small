@@ -1,11 +1,14 @@
 """Run one experiment stage (a grid of train.py runs) sequentially and summarise it.
 
+The stages in the order they were run (README.md has the full list):
     uv run python sweep.py throughput
-    uv run python sweep.py lr
-    uv run python sweep.py vocab --optim muon --lr 4e-3
-    uv run python sweep.py shapes --lr 2e-3 --vocab 8192
-    uv run python sweep.py wd --lr 2e-3 --vocab 8192 --config mobilellm
-    uv run python sweep.py final --lr 2e-3 --muon-lr 2e-3 --vocab 8192 --config mobilellm --wd 0.5 --epochs 10
+    uv run python sweep.py lr --config mobilellm
+    uv run python sweep.py vocab --optim muon --lr 4e-3 --config mobilellm
+    uv run python sweep.py shapes --optim muon --lr 4e-3 --vocab 8192
+    uv run python sweep.py wd --optim muon --lr 4e-3 --config levine --wds 0.1 0.5 1.0 2.0
+    uv run python sweep.py final --config levine --lr 5e-4 --muon-lr 4e-3 --wd 1.0 --epochs 10
+    uv run python sweep.py moe --optim muon --lr 4e-3
+    uv run python sweep.py final100k --config levine --lr 4e-3 --wd 1.0 --epochs 10
 
 Each run's stdout goes to runs/<stage>/<run>/stdout.log; the stage table is
 written to runs/<stage>/summary.csv.

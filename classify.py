@@ -6,9 +6,9 @@ state of the last real (non-pad) token. Because attention is causal, that is
 the only position that has seen the whole sentence, and right padding after it
 cannot affect it.
 
-    uv run python classify.py --ckpt runs/final/adamw/best.pt --mode full --label sentiment
-    uv run python classify.py --ckpt runs/final/adamw/best.pt --mode probe
-    uv run python classify.py --ckpt runs/final/adamw/best.pt --mode random   # same model, untrained weights
+    uv run python classify.py --ckpt runs/final/muon/best.pt --mode full --label sentiment
+    uv run python classify.py --ckpt runs/final/muon/best.pt --mode probe
+    uv run python classify.py --ckpt runs/final/muon/best.pt --mode random   # same model, untrained weights
 """
 
 import argparse

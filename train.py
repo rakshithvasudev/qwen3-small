@@ -3,8 +3,9 @@
 Prints the training loss at every optimizer step and the validation loss at
 every evaluation, and writes both to runs/<name>/metrics.jsonl.
 
-Example:
-    uv run python train.py --name smoke --config mobilellm --stories 10000 --epochs 1
+Example (a ~3-minute run from scratch, 4 validation evals):
+    uv run python train.py --name demo --config levine --stories 10000 --epochs 1 \
+        --optim muon --lr 4e-3 --sched wsd --warmup-frac 0.1 --wd 1.0 --eval-every 20 --max-steps 60
 """
 
 import argparse
